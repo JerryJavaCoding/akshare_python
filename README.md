@@ -1,59 +1,68 @@
-# Python MCP Server
+# akshare_python - 金融数据 MCP 服务器
 
-A Python implementation of a Model Context Protocol (MCP) server.
+基于 Python 和 akshare 库的 Model Context Protocol (MCP) 服务器，提供全面的金融数据服务。
 
-## Overview
+## 功能特性
 
-This project provides a Python-based MCP server with example tools and resources that can be used with MCP-compatible clients.
+### 基础工具
+- `echo`: 回显输入文本
+- `calculate`: 基础数学计算
+- `get_time`: 获取当前时间信息
 
-## Features
+### 股票数据服务
+- `get_stock_spot`: 获取股票实时行情数据
+- `get_stock_history`: 获取股票历史数据（日线/周线/月线）
+- `get_stock_financials`: 获取股票财务数据
+- `get_stock_valuation`: 获取股票估值数据
+- `get_stock_technical_indicators`: 获取股票技术指标
+- `get_stock_capital_flow`: 获取股票资金流向数据
+- `get_stock_analyst_ratings`: 获取分析师评级数据
+- `get_stock_company_info`: 获取公司基本信息
 
-- **Basic Tools**:
-  - `echo`: Echo back the input text
-  - `calculate`: Perform basic arithmetic calculations
-  - `get_time`: Get current time information
+### 基金数据服务
+- `get_fund_info`: 获取基金信息
 
-- **Financial Data Tools (using akshare)**:
-  - `get_stock_spot`: 获取股票实时行情数据
-  - `get_stock_history`: 获取股票历史数据
-  - `get_fund_info`: 获取基金信息
-  - `get_index_data`: 获取指数数据
-  - `get_futures_data`: 获取期货数据
+### 指数数据服务
+- `get_index_data`: 获取指数数据
 
-- **Resources**:
-  - `example://info`: Example resource providing basic information
+### 期货数据服务
+- `get_futures_data`: 获取期货数据
 
-## Installation
+### 行业分析服务
+- `get_industry_news`: 获取指定行业的新闻资讯
+- `get_policy_support`: 获取行业政策支持信息
+- `get_investment_events`: 获取投资发展重大事项
+- `get_market_heat`: 获取市场热度分析
+- `get_industry_overview`: 获取行业综合概览报告
 
-1. Clone this repository:
-```bash
-git clone <repository-url>
-cd mcp-python-project
-```
+## 快速开始
 
-2. Install dependencies:
+### 安装依赖
+
 ```bash
 pip install -e .
 ```
 
-For development dependencies:
+开发环境安装：
 ```bash
 pip install -e ".[dev]"
 ```
 
-## Usage
-
-### Running the Server
-
-You can run the server directly:
+### 运行服务器
 
 ```bash
-python -m src.mcp_server.server
+python scripts/run_finance_server.py
 ```
 
-### MCP客户端连接配置
+或直接运行模块：
 
-#### Claude Desktop 配置
+```bash
+python -m src.mcp_server.finance_server
+```
+
+## MCP 客户端配置
+
+### Claude Desktop 配置
 
 编辑配置文件 `~/Library/Application Support/Claude/claude_desktop_config.json`：
 
@@ -62,14 +71,14 @@ python -m src.mcp_server.server
   "mcpServers": {
     "python-finance-server": {
       "command": "python",
-      "args": ["-m", "src.mcp_server.server"],
+      "args": ["scripts/run_finance_server.py"],
       "cwd": "/Users/jerry/code/akshare_python"
     }
   }
 }
 ```
 
-#### 其他MCP客户端
+### 其他 MCP 客户端
 
 通用配置格式：
 ```json
@@ -77,109 +86,70 @@ python -m src.mcp_server.server
   "mcpServers": {
     "finance-data": {
       "command": "python",
-      "args": ["-m", "src.mcp_server.server"],
+      "args": ["scripts/run_finance_server.py"],
       "cwd": "/absolute/path/to/your/project"
     }
   }
 }
 ```
 
-详细配置说明请参考 [CONFIGURATION.md](CONFIGURATION.md)。
+## 使用示例
 
-## Development
-
-### Project Structure
-
-```
-mcp-python-project/
-├── src/
-│   └── mcp_server/
-│       ├── __init__.py
-│       ├── server.py
-│       └── finance_tools.py
-├── scripts/
-│   └── run_server.py
-├── tests/
-│   └── test_server.py
-├── pyproject.toml
-├── README.md
-└── .gitignore
-```
-
-### Financial Data Examples
-
-The server provides access to various financial data through akshare:
+### 股票数据查询
 
 ```python
-# Get real-time stock data
+# 获取股票实时行情
 get_stock_spot(symbol="000001")
 
-# Get historical stock data
+# 获取股票历史数据
 get_stock_history(symbol="000001", period="daily")
 
-# Get fund information
-get_fund_info(symbol="000001")
+# 获取财务数据
+get_stock_financials(symbol="000001")
 
-# Get index data
-get_index_data(symbol="000001")
-
-# Get futures data
-get_futures_data(symbol="AU0")
+# 获取技术指标
+get_stock_technical_indicators(symbol="000001")
 ```
 
-### Adding New Tools
-
-To add a new tool:
-
-1. Add the tool definition in `handle_list_tools()`
-2. Implement the tool logic in `handle_call_tool()`
-
-Example:
+### 行业分析
 
 ```python
-@server.list_tools()
-async def handle_list_tools() -> list[types.Tool]:
-    return [
-        # ... existing tools ...
-        types.Tool(
-            name="new_tool",
-            description="Description of the new tool",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "param": {"type": "string", "description": "Parameter description"}
-                },
-                "required": ["param"]
-            }
-        )
-    ]
+# 获取科技行业新闻
+get_industry_news(industry="technology")
 
-@server.call_tool()
-async def handle_call_tool(name: str, arguments: dict[str, Any] | None):
-    if name == "new_tool":
-        # Implement tool logic here
-        return [types.TextContent(type="text", text="Tool result")]
+# 获取新能源行业政策支持
+get_policy_support(industry="new_energy")
+
+# 获取医疗保健行业市场热度
+get_market_heat(industry="healthcare")
+
+# 获取金融行业综合概览
+get_industry_overview(industry="finance")
 ```
 
-### Adding New Resources
+## 项目结构
 
-To add a new resource:
+详细的项目结构说明请参考 [.cline/project_structure.md](.cline/project_structure.md)
 
-1. Add the resource definition in `handle_list_resources()`
-2. Implement the resource reading logic in `handle_read_resource()`
+## 技术栈
 
-## Testing
+- **Python 3.8+**: 主要编程语言
+- **akshare**: 金融数据获取库
+- **MCP (Model Context Protocol)**: 协议标准
+- **requests**: HTTP 请求库
+- **pandas**: 数据处理库
 
-Run tests with:
+## 开发
+
+### 运行测试
 
 ```bash
 pytest
 ```
 
-## License
+### 项目配置
 
-[Add your license here]
-
-## Contributing
-
-[Add contribution guidelines here]
+- 使用虚拟环境管理依赖
+- 支持 pytest 测试框架
+- 遵循 MCP 协议标准
+- 包含反爬虫机制

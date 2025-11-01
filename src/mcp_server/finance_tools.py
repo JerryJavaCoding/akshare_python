@@ -199,6 +199,279 @@ class FinanceDataService:
         except Exception as e:
             return [types.TextContent(type="text", text=f"获取期货数据失败: {str(e)}")]
 
+    @staticmethod
+    def get_stock_financials(symbol: str) -> List[types.TextContent]:
+        """获取股票财务数据 - 使用新浪财经财务摘要数据"""
+        try:
+            # 使用新浪财经财务摘要数据
+            financial_data = ak.stock_financial_abstract(symbol=symbol)
+            
+            if financial_data.empty:
+                return [types.TextContent(type="text", text=f"未找到股票代码: {symbol} 的财务数据")]
+            
+            # 获取最新的财务数据（最新季度）
+            latest_data = financial_data.iloc[0]
+            
+            # 提取关键财务指标
+            net_profit = latest_data.get('20250930', 'N/A')  # 归母净利润
+            total_revenue = latest_data.get('20250630', 'N/A')  # 营业总收入
+            
+            financial_info = f"""
+股票代码: {symbol}
+数据来源: 新浪财经财务摘要
+最新财务数据:
+- 归母净利润(2025Q3): {net_profit}
+- 营业总收入(2025Q2): {total_revenue}
+
+完整财务数据包含多个季度历史数据，建议直接查看原始数据获取详细信息。
+"""
+            return [types.TextContent(type="text", text=financial_info)]
+        except Exception as e:
+            return [types.TextContent(type="text", text=f"获取财务数据失败: {str(e)}")]
+
+    @staticmethod
+    def get_stock_valuation(symbol: str) -> List[types.TextContent]:
+        """获取股票估值数据"""
+        try:
+            # 获取估值数据 - 使用正确的参数
+            valuation_data = ak.stock_zh_valuation_baidu(symbol=symbol, indicator="总市值")
+            
+            if valuation_data.empty:
+                return [types.TextContent(type="text", text=f"未找到股票代码: {symbol} 的估值数据")]
+            
+            latest_data = valuation_data.iloc[0]
+            
+            valuation_info = f"""
+股票代码: {symbol}
+总市值: {latest_data['value']:,.0f} 亿元
+估值日期: {latest_data['date']}
+"""
+            return [types.TextContent(type="text", text=valuation_info)]
+        except Exception as e:
+            return [types.TextContent(type="text", text=f"获取估值数据失败: {str(e)}")]
+
+    @staticmethod
+    def get_stock_valuation_comprehensive(symbol: str) -> List[types.TextContent]:
+        """获取综合估值数据 - 集成多数据源"""
+        try:
+            # 尝试多个数据源获取估值数据
+            valuation_data = None
+            source_name = ""
+            
+            # 优先使用百度股市通估值数据
+            try:
+                # 获取总市值数据
+                valuation_data = ak.stock_zh_valuation_baidu(symbol=symbol, indicator="总市值")
+                source_name = "百度股市通"
+                
+                # 尝试获取其他估值指标
+                try:
+                    pe_data = ak.stock_zh_valuation_baidu(symbol=symbol, indicator="市盈率(TTM)")
+                    pb_data = ak.stock_zh_valuation_baidu(symbol=symbol, indicator="市净率")
+                    
+                    # 合并数据
+                    if not pe_data.empty and not pb_data.empty:
+                        valuation_data['pe'] = pe_data.iloc[0]['value']
+                        valuation_data['pb'] = pb_data.iloc[0]['value']
+                except Exception as e:
+                    print(f"获取详细估值指标失败: {e}")
+                    
+            except Exception as e:
+                print(f"百度股市通估值数据获取失败: {e}")
+                valuation_data = None
+            
+            if valuation_data is None or valuation_data.empty:
+                return [types.TextContent(type="text", text=f"未找到股票代码: {symbol} 的估值数据")]
+            
+            # 格式化估值数据
+            latest_data = valuation_data.iloc[0]
+            
+            # 提取估值指标
+            pe = latest_data.get('pe', 'N/A')
+            pb = latest_data.get('pb', 'N/A')
+            ps = 'N/A'  # 市销率暂不可用
+            dv_ratio = 'N/A'  # 股息率暂不可用
+            total_mv = latest_data.get('value', 'N/A')
+            
+            valuation_info = f"""
+股票代码: {symbol}
+数据来源: {source_name}
+估值数据:
+- 市盈率(PE): {pe}
+- 市净率(PB): {pb}
+- 市销率(PS): {ps}
+- 股息率: {dv_ratio}%
+- 总市值: {total_mv:,.0f} 亿元
+"""
+            return [types.TextContent(type="text", text=valuation_info)]
+        except Exception as e:
+            return [types.TextContent(type="text", text=f"获取综合估值数据失败: {str(e)}")]
+
+    @staticmethod
+    def get_stock_technical_indicators(symbol: str) -> List[types.TextContent]:
+        """获取股票技术指标"""
+        try:
+            # 获取历史数据计算技术指标 - 使用不复权数据
+            stock_data = ak.stock_zh_a_hist(symbol=symbol, period="daily", adjust="")
+            
+            if stock_data.empty:
+                return [types.TextContent(type="text", text=f"未找到股票代码: {symbol} 的历史数据")]
+            
+            # 计算简单技术指标
+            latest_data = stock_data.iloc[-1]
+            prev_data = stock_data.iloc[-2] if len(stock_data) > 1 else latest_data
+            
+            # 计算RSI (简化版)
+            price_changes = stock_data['收盘'].diff()
+            gains = price_changes.where(price_changes > 0, 0)
+            losses = -price_changes.where(price_changes < 0, 0)
+            avg_gain = gains.tail(14).mean()
+            avg_loss = losses.tail(14).mean()
+            rsi = 100 - (100 / (1 + (avg_gain / avg_loss))) if avg_loss != 0 else 50
+            
+            # 计算均线
+            ma5 = stock_data['收盘'].tail(5).mean()
+            ma20 = stock_data['收盘'].tail(20).mean()
+            ma60 = stock_data['收盘'].tail(60).mean()
+            
+            technical_info = f"""
+股票代码: {symbol}
+技术指标分析:
+- MA5: {ma5:.2f} 元
+- MA20: {ma20:.2f} 元  
+- MA60: {ma60:.2f} 元
+- RSI(14): {rsi:.2f}
+- 当前价格: {latest_data['收盘']:.2f} 元
+- 相对MA5位置: {'上方' if latest_data['收盘'] > ma5 else '下方'}
+- 相对MA20位置: {'上方' if latest_data['收盘'] > ma20 else '下方'}
+- 相对MA60位置: {'上方' if latest_data['收盘'] > ma60 else '下方'}
+"""
+            return [types.TextContent(type="text", text=technical_info)]
+        except Exception as e:
+            return [types.TextContent(type="text", text=f"获取技术指标失败: {str(e)}")]
+
+    @staticmethod
+    def get_stock_capital_flow(symbol: str) -> List[types.TextContent]:
+        """获取股票资金流向数据 - 使用东方财富个股资金流向数据"""
+        try:
+            # 确定市场类型
+            if symbol.startswith('6'):
+                market = 'sh'  # 上证
+            elif symbol.startswith('0') or symbol.startswith('3'):
+                market = 'sz'  # 深证
+            else:
+                market = 'sz'  # 默认深市
+            
+            # 使用东方财富个股资金流向数据
+            capital_flow = ak.stock_individual_fund_flow(stock=symbol, market=market)
+            
+            if capital_flow.empty:
+                return [types.TextContent(type="text", text=f"未找到股票代码: {symbol} 的资金流向数据")]
+            
+            # 获取最新的资金流向数据
+            latest_data = capital_flow.iloc[0]
+            
+            # 安全格式化函数
+            def safe_format(value, format_type='number'):
+                if value == 'N/A' or value is None:
+                    return 'N/A'
+                try:
+                    if isinstance(value, (int, float)):
+                        num_value = value
+                    elif isinstance(value, str):
+                        # 尝试转换为数字
+                        num_value = float(value)
+                    else:
+                        return 'N/A'
+                    
+                    if format_type == 'number':
+                        return f"{num_value:,.0f}"
+                    elif format_type == 'percent':
+                        return f"{num_value:.2f}"
+                    else:
+                        return str(value)
+                except (ValueError, TypeError):
+                    return 'N/A'
+            
+            # 提取资金流向指标
+            main_net_inflow = latest_data.get('主力净流入-净额', 'N/A')
+            super_large_net_inflow = latest_data.get('超大单净流入-净额', 'N/A')
+            large_net_inflow = latest_data.get('大单净流入-净额', 'N/A')
+            medium_net_inflow = latest_data.get('中单净流入-净额', 'N/A')
+            small_net_inflow = latest_data.get('小单净流入-净额', 'N/A')
+            main_net_inflow_rate = latest_data.get('主力净流入-净占比', 'N/A')
+            super_large_net_inflow_rate = latest_data.get('超大单净流入-净占比', 'N/A')
+            
+            capital_info = f"""
+股票代码: {symbol}
+数据来源: 东方财富个股资金流向
+最新资金流向数据 (日期: {latest_data.get('日期', '未知')}):
+- 主力净流入: {safe_format(main_net_inflow, 'number')} 元 ({safe_format(main_net_inflow_rate, 'percent')}%)
+- 超大单净流入: {safe_format(super_large_net_inflow, 'number')} 元 ({safe_format(super_large_net_inflow_rate, 'percent')}%)
+- 大单净流入: {safe_format(large_net_inflow, 'number')} 元
+- 中单净流入: {safe_format(medium_net_inflow, 'number')} 元
+- 小单净流入: {safe_format(small_net_inflow, 'number')} 元
+
+注: 数据包含历史120个交易日的资金流向记录。
+"""
+            return [types.TextContent(type="text", text=capital_info)]
+        except Exception as e:
+            return [types.TextContent(type="text", text=f"获取资金流向数据失败: {str(e)}")]
+
+    @staticmethod
+    def get_stock_analyst_ratings(symbol: str) -> List[types.TextContent]:
+        """获取分析师评级数据"""
+        try:
+            # 获取分析师评级数据
+            ratings_data = ak.stock_analyst_rank_em(symbol=symbol)
+            
+            if ratings_data.empty:
+                return [types.TextContent(type="text", text=f"未找到股票代码: {symbol} 的分析师评级数据")]
+            
+            latest_rating = ratings_data.iloc[0]
+            
+            rating_info = f"""
+股票代码: {symbol}
+分析师评级:
+- 机构名称: {latest_rating['机构名称']}
+- 评级日期: {latest_rating['评级日期']}
+- 最新评级: {latest_rating['最新评级']}
+- 目标价: {latest_rating['目标价']} 元
+- 评级变动: {latest_rating['评级变动']}
+- 投资建议: {latest_rating['投资建议']}
+"""
+            return [types.TextContent(type="text", text=rating_info)]
+        except Exception as e:
+            return [types.TextContent(type="text", text=f"获取分析师评级失败: {str(e)}")]
+
+    @staticmethod
+    def get_stock_company_info(symbol: str) -> List[types.TextContent]:
+        """获取公司基本信息"""
+        try:
+            # 获取公司基本信息
+            company_info = ak.stock_individual_info_em(symbol=symbol)
+            
+            if company_info.empty:
+                return [types.TextContent(type="text", text=f"未找到股票代码: {symbol} 的公司信息")]
+            
+            # 提取关键信息
+            latest_price = company_info[company_info['item'] == '最新']['value'].iloc[0] if not company_info[company_info['item'] == '最新'].empty else "未知"
+            stock_name = company_info[company_info['item'] == '股票简称']['value'].iloc[0] if not company_info[company_info['item'] == '股票简称'].empty else "未知"
+            total_shares = company_info[company_info['item'] == '总股本']['value'].iloc[0] if not company_info[company_info['item'] == '总股本'].empty else "未知"
+            float_shares = company_info[company_info['item'] == '流通股']['value'].iloc[0] if not company_info[company_info['item'] == '流通股'].empty else "未知"
+            
+            company_info_text = f"""
+股票代码: {symbol}
+公司基本信息:
+- 股票简称: {stock_name}
+- 最新价格: {latest_price} 元
+- 总股本: {total_shares:,.0f} 股
+- 流通股本: {float_shares:,.0f} 股
+"""
+            return [types.TextContent(type="text", text=company_info_text)]
+        except Exception as e:
+            return [types.TextContent(type="text", text=f"获取公司信息失败: {str(e)}")]
+
 
 # Tool definitions for MCP
 FINANCE_TOOLS = [
@@ -275,6 +548,90 @@ FINANCE_TOOLS = [
                 }
             },
             "required": []
+        }
+    ),
+    types.Tool(
+        name="get_stock_financials",
+        description="获取股票财务数据（使用新浪财经财务摘要数据）",
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "symbol": {
+                    "type": "string",
+                    "description": "股票代码"
+                }
+            },
+            "required": ["symbol"]
+        }
+    ),
+    types.Tool(
+        name="get_stock_valuation",
+        description="获取股票估值数据",
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "symbol": {
+                    "type": "string",
+                    "description": "股票代码"
+                }
+            },
+            "required": ["symbol"]
+        }
+    ),
+    types.Tool(
+        name="get_stock_technical_indicators",
+        description="获取股票技术指标",
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "symbol": {
+                    "type": "string",
+                    "description": "股票代码"
+                }
+            },
+            "required": ["symbol"]
+        }
+    ),
+    types.Tool(
+        name="get_stock_capital_flow",
+        description="获取股票资金流向数据（使用东方财富个股资金流向数据）",
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "symbol": {
+                    "type": "string",
+                    "description": "股票代码"
+                }
+            },
+            "required": ["symbol"]
+        }
+    ),
+    types.Tool(
+        name="get_stock_analyst_ratings",
+        description="获取分析师评级数据",
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "symbol": {
+                    "type": "string",
+                    "description": "股票代码"
+                }
+            },
+            "required": ["symbol"]
+        }
+    ),
+    types.Tool(
+        name="get_stock_company_info",
+        description="获取公司基本信息",
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "symbol": {
+                    "type": "string",
+                    "description": "股票代码"
+                }
+            },
+            "required": ["symbol"]
         }
     )
 ]
